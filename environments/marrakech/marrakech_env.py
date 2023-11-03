@@ -86,6 +86,8 @@ class MarrakechEnv(gym.Env):
                     new_x = new_x + 1 if new_x % 2 == 0 else new_x - 1
                     self.assam_dir = Direction.EAST
 
+            self.assam_pos = [new_x, new_y]
+
     def _get_state(self):
         state = {
             'board': self.board,
