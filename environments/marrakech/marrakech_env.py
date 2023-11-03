@@ -85,3 +85,12 @@ class MarrakechEnv(gym.Env):
                 # If on even x position, move 1 to the bottom, else one to the top
                     new_x = new_x + 1 if new_x % 2 == 0 else new_x - 1
                     self.assam_dir = Direction.EAST
+
+    def _get_state(self):
+        state = {
+            'board': self.board,
+            'assam_pos': self.assam_pos,
+            'assam_dir': self.assam_dir,
+            'remaining_rugs': self.remaining_rugs
+        }
+        return state
