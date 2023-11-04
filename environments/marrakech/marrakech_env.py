@@ -96,3 +96,8 @@ class MarrakechEnv(gym.Env):
             'remaining_rugs': self.remaining_rugs
         }
         return state
+
+    def _roll_die(self):
+        values = [1, 2, 3, 4]
+        weights = [1/6, 1/3, 1/3, 1/6]
+        return np.random.choice(values, p=weights)
