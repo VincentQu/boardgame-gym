@@ -97,6 +97,24 @@ class MarrakechEnv(gym.Env):
         }
         return state
 
+    def get_rug_pos_candidates(self):
+        x, y = self.assam_pos
+        candidates = [
+            ([x-2, y],      [x-1, y]),      # Top, pointing north
+            ([x-1, y-1],    [x-1, y]),      # Top, pointing west
+            ([x-1, y],      [x-1, y+1]),    # Top, pointing east
+            ([x+1, y],      [x+2, y]),      # Bottom, pointing south
+            ([x+1, y-1],    [x+1, y]),      # Bottom, pointing west
+            ([x+1, y],      [x+1, y+1]),    # Bottom, pointing east
+            ([x, y+1],      [x, y+2]),      # Right, pointing east
+            ([x-1, y+1],    [x, y+1]),      # Right, pointing north
+            ([x, y+1],      [x+1, y+1]),    # Right, pointing south
+            ([x, y-2],      [x, y-1]),      # Left, pointing west
+            ([x-1, y-1],    [x, y-1]),      # Left, pointing north
+            ([x, y-1],      [x+1, y-1]),    # Left, pointing south
+        ]
+        return candidates
+
     def _roll_die(self):
         values = [1, 2, 3, 4]
         weights = [1/6, 1/3, 1/3, 1/6]
