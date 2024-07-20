@@ -1,7 +1,6 @@
 import gymnasium as gym
 from gymnasium import spaces
 
-from itertools import combinations
 import numpy as np
 
 
@@ -130,8 +129,6 @@ class CantStopEnv(gym.Env):
         possible_moves = []
         for pair in dice_combinations:
             pair_available = tuple(p for p in pair if p in available_columns)
-            # pair_available = set(pair) & available_columns
-            print(pair, pair_available)
 
             # If none of the columns of the pair are available, no move can be made using this pair
             if len(pair_available) == 0:
@@ -141,12 +138,10 @@ class CantStopEnv(gym.Env):
             elif free_temp_markers == 0:
                 if len(set(pair_available) & tmp_columns) > 0:
                     possible_moves.append(tuple(p for p in pair_available if p in tmp_columns))
-                continue
 
             # If enough free tmp markers for each pair (not already in tmp columns) are available, complete pair is possible
             elif len(set(pair_available) - tmp_columns) <= free_temp_markers:
                 possible_moves.append(pair_available)
-                # continue
 
             # If only 1 free tmp marker but two columns, then add each individually
             else:
