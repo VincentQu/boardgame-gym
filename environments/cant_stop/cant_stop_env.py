@@ -6,31 +6,51 @@ import numpy as np
 
 class CantStopActionSpace(gym.Space):
     def __init__(self):
-        # Each action is represented as a tuple
+        # Each action is represented as a tuple (columns, continue_flag)
+        # columns is itself a tuple of length 0, 1, 2 indicating the columns on which to advance (0 = bust)
+        # continue_flag is boolean indicating whether to roll again or stop
         super().__init__(shape=(), dtype=object)
 
     def sample(self):
-        # Action can be one column (1), two columns (2), or stop (3)
-        action_type = np.random.choice([1, 2, 3])
+        # There are 5 types of possible actions:
+        # 1: Advance on two columns and continue
+        # 2: Advance on two columns and stop
+        # 3: Advance on one column and continue
+        # 4: Advance on one column and stop
+        # 5: Do not advance (because no combinations are possible) and bust
+        action_type = np.random.choice([1, 2, 3, 4, 5])
 
-        if action_type == 1:
-            return (np.random.randint(2, 13),)
+        if action_type in [1, 2]:
+            columns = tuple(sorted(np.random.choice(range(2, 13), size=2)))
+            continue_flag = action_type == 1
 
-        elif action_type == 2:
-            columns = np.random.randint(2, 13, size=(2,))
-            return tuple(sorted(columns))
+        elif action_type in [3, 4]:
+            columns = (np.random.choice(range(2, 13)),)
+            continue_flag = action_type == 3
 
         else:
-            return (1,)
+            columns = tuple()
+            continue_flag = False
+
+        return (columns, continue_flag)
+
 
     def contains(self, x):
-        if not isinstance(x, tuple):
-            return False
-        if len(x) not in [1, 2]:
-            return False
-        if x == (1,):
-            return True
-        return all(2 <= i <= 12 for i in x)
+
+        if not isinstance(x, tuple) or len(x) != 2:
+            return False # x must be tuple of length 2 (columns, continue_flag)
+
+        columns, continue_flag = x
+        if not isinstance(columns, tuple) or not isinstance(continue_flag, bool):
+            return False # columns must be tuple and continue_flag boolean
+
+        if len(columns) == 0:
+            return True # Bust
+
+        if len(columns) > 2:
+            return False # 2 columns max
+
+        return all(2 <= c <= 12for c in columns) # Columns must be valid (2-12)
 
 
 class CantStopEnv(gym.Env):
@@ -74,12 +94,53 @@ class CantStopEnv(gym.Env):
         self.player_marker_positions = {p: {c: None for c in self.columns} for p in range(self.num_players)}
         self.tmp_marker_positions = {c: None for c in self.columns}
         self.current_player = np.random.randint(0, self.num_players, size=1)
-        self.dice = self.roll_dice()
+        self.dice = self._roll_dice()
 
         # Return observation and auxiliary information dict
         return self._get_observation(), {}
 
-    def roll_dice(self):
+    def step(self, action):
+
+        assert self.action_space.contains(action)
+        columns, continue_flag = action
+
+        if len(columns) == 0: # Bust
+            reward = -1 #TODO: Set correct reward value
+
+            # Reset tmp markers
+            self.tmp_marker_positions = {c: None for c in self.columns}
+
+            # Set next player and roll dice
+            self.current_player = (self.current_player + 1) % self.num_players
+            self.dice = self._roll_dice()
+
+            terminated = False
+            observation = self._get_observation()
+
+        else: # Move
+            reward = self._move_markers(action)
+
+            if continue_flag: # continue
+                self.dice = self._roll_dice()
+                terminated = False
+                observation = self._get_observation()
+
+            else: # stop
+                # Update player marker positions and reset tmp markers
+                reward = self._end_turn()
+                terminated = self._check_game_end()
+
+                if not terminated:
+                    # Set next player and roll dice
+                    self.current_player = (self.current_player + 1) % self.num_players
+                    self.dice = self._roll_dice()
+
+                observation = self._get_observation()
+
+        return observation, reward, terminated, False, {}
+
+
+    def _roll_dice(self):
         # Roll 4 dice
         return np.random.randint(1, 7, size=4)
 
@@ -122,8 +183,10 @@ class CantStopEnv(gym.Env):
         dice_combinations = self._get_dice_combinations()
         available_columns = self._get_available_columns()
 
-        tmp_columns = set([column for column, level in self.tmp_marker_positions.items() if level is not None and level != self.column_lengths[column] - 1])
-        complete_tmp_columns = set([column for column, level in self.tmp_marker_positions.items() if level == self.column_lengths[column] - 1])
+        tmp_columns = set([column for column, level in self.tmp_marker_positions.items() if
+                           level is not None and level != self.column_lengths[column] - 1])
+        complete_tmp_columns = set(
+            [column for column, level in self.tmp_marker_positions.items() if level == self.column_lengths[column] - 1])
         free_temp_markers = 3 - len(tmp_columns) - len(complete_tmp_columns)
 
         possible_moves = []
@@ -148,3 +211,32 @@ class CantStopEnv(gym.Env):
                 possible_moves += [tuple([p]) for p in pair_available]
 
         return possible_moves
+
+    def _move_markers(self, action):
+        for column in action:
+            if self.tmp_marker_positions[column] is None:
+                self.tmp_marker_positions[column] = 0
+            else:
+                self.tmp_marker_positions[column] += 1
+
+        reward = 0 #TODO: Set correct reward value
+        return reward
+
+    def _end_turn(self):
+        # Set positions of tmp markers to marker positions of current player
+        for column, position in self.tmp_marker_positions.items():
+            if position is not None:
+                self.player_marker_positions[self.current_player][column] = position
+        # Reset tmp markers
+        self.tmp_marker_positions = {c: None for c in self.columns}
+
+        reward = 0 #TODO: Set correct reward value
+        return reward
+
+    def _check_game_end(self):
+        # Check if any player has 3 columns complete (i.e., marker positioned at highest position)
+        for positions in self.player_marker_positions.values():
+            complete_columns = sum([positions[column] == self.column_lengths[column] - 1 for column in self.column_lengths])
+            if complete_columns >= 3:
+                return True
+            return False
