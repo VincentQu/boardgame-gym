@@ -220,6 +220,21 @@ class CantStopEnv(gym.Env):
         else:
             print(html)
 
+    def get_possible_actions(self):
+        possible_actions = []
+        possible_moves = self._get_possible_moves()
+
+        for move in possible_moves:
+            if len(move) == 0:
+                # If you bust, you cannot continue
+                possible_actions.append((tuple(), False))
+            else:
+                # If you have a valid move, you can always choose to continue or not
+                possible_actions.append(move, True)
+                possible_actions.append(move, False)
+
+        return possible_actions
+    
     def _roll_dice(self):
         # Roll 4 dice
         return sorted(np.random.randint(1, 7, size=4))
