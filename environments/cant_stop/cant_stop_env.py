@@ -239,4 +239,4 @@ class CantStopEnv(gym.Env):
             complete_columns = sum([positions[column] == self.column_lengths[column] - 1 for column in self.column_lengths])
             if complete_columns >= 3:
                 return True
-            return False
+        return False
