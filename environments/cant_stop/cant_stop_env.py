@@ -50,7 +50,7 @@ class CantStopActionSpace(gym.Space):
         if len(columns) > 2:
             return False # 2 columns max
 
-        return all(2 <= c <= 12for c in columns) # Columns must be valid (2-12)
+        return all(2 <= c <= 12 for c in columns) # Columns must be valid (2-12)
 
 
 class CantStopEnv(gym.Env):
@@ -93,7 +93,7 @@ class CantStopEnv(gym.Env):
     def reset(self):
         self.player_marker_positions = {p: {c: None for c in self.columns} for p in range(self.num_players)}
         self.tmp_marker_positions = {c: None for c in self.columns}
-        self.current_player = np.random.randint(0, self.num_players, size=1)
+        self.current_player = int(np.random.randint(0, self.num_players, size=1))
         self.dice = self._roll_dice()
 
         # Return observation and auxiliary information dict
@@ -101,10 +101,14 @@ class CantStopEnv(gym.Env):
 
     def step(self, action):
 
-        assert self.action_space.contains(action)
+        assert self.action_space.contains(action), 'Action needs to be a tuple (columns, continue_flag)'
         columns, continue_flag = action
 
+        possible_moves = self._get_possible_moves()
+        assert columns in possible_moves, 'Impossible move'
+
         if len(columns) == 0: # Bust
+            assert continue_flag == False, 'Cannot continue after busting'
             reward = -1 #TODO: Set correct reward value
 
             # Reset tmp markers
@@ -210,10 +214,15 @@ class CantStopEnv(gym.Env):
             else:
                 possible_moves += [tuple([p]) for p in pair_available]
 
+        # Add empty tuple (representing bust) if no moves are possible
+        if len(possible_moves) == 0:
+            possible_moves.append(tuple())
+
         return possible_moves
 
     def _move_markers(self, action):
-        for column in action:
+        columns, _ = action
+        for column in columns:
             if self.tmp_marker_positions[column] is None:
                 self.tmp_marker_positions[column] = 0
             else:
