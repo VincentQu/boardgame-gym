@@ -2,6 +2,8 @@ import gymnasium as gym
 from gymnasium import spaces
 
 import numpy as np
+from IPython.display import display, HTML
+import sys
 
 
 class CantStopActionSpace(gym.Space):
@@ -56,6 +58,9 @@ class CantStopActionSpace(gym.Space):
 class CantStopEnv(gym.Env):
     def __init__(self, num_players):
         super(CantStopEnv, self).__init__()
+
+        self.player_colors = ['red', 'green', 'blue', 'yellow']
+        self.is_notebook = 'ipykernel' in sys.modules
 
         self.num_players = num_players
         self.columns = np.arange(start=2, stop=13)
@@ -144,9 +149,80 @@ class CantStopEnv(gym.Env):
         return observation, reward, terminated, False, {}
 
 
+    def render(self):
+        # Unicode characters for markers
+        PLAYER_MARKER = '●'
+        TEMP_MARKER = '○'
+        EMPTY_SPACE = '·'
+        INACCESSIBLE = '—'
+
+        # Create the board
+        board = [[EMPTY_SPACE for _ in range(11)] for _ in range(13)]
+
+        # Fill in inaccessible spaces
+        for col, length in self.column_lengths.items():
+            for row in range(length, 13):
+                board[row][col-2] = INACCESSIBLE
+
+        # Place player markers
+        for player, positions in self.player_marker_positions.items():
+            for col, pos in positions.items():
+                if pos is not None:
+                    # Add player marker (multiple markers possible in same position)
+                    board[pos][col-2] += f'<span style="color:{self.player_colors[player]};">{PLAYER_MARKER}</span>'
+                    # Remove empty space marker
+                    board[pos][col - 2] = board[pos][col-2].replace(EMPTY_SPACE, '')
+
+        # Place temporary markers
+        for col, pos in self.tmp_marker_positions.items():
+            if pos is not None:
+                # Add tmp marker (multiple markers possible in same position)
+                board[pos][col-2] += f'<span style="color:gray;">{TEMP_MARKER}</span>'
+                # Remove empty space marker
+                board[pos][col - 2] = board[pos][col - 2].replace(EMPTY_SPACE, '')
+
+        # Create the HTML string
+        html = '<pre style="line-height: 1.2; font-family: monospace; font-size: 16px;">'
+        for row in range(12, -1, -1):
+            html += f"{row:2d} "
+            for col in range(11):
+                html_cell = board[row][col]
+                items = 0
+                items += html_cell.count(EMPTY_SPACE)
+                items += html_cell.count(INACCESSIBLE)
+                items += html_cell.count('<span')
+                # print(items, html_cell)
+                if items == 1:
+                    html += f"  {board[row][col]}  "
+                elif items == 2:
+                    html += f" {board[row][col]}  "
+                elif items == 3:
+                    html += f" {board[row][col]} "
+                elif items == 4:
+                    html += f"{board[row][col]} "
+                else:
+                    html += f"{board[row][col]}"
+            html += '<br>'
+
+        # Add column numbers (aligned)
+        html += "   "  # Extra space to align with board
+        for col in range(2, 13):
+            html += f"{col:^5}"
+        html += '<br><br>'
+
+        # Add current player and dice roll
+        html += f"Current player: <span style='color:{self.player_colors[self.current_player]};'>Player {self.current_player}</span><br>"
+        html += f"Dice roll: {self.dice}<br>"
+        html += '</pre>'
+
+        if self.is_notebook:
+            display(HTML(html))
+        else:
+            print(html)
+
     def _roll_dice(self):
         # Roll 4 dice
-        return np.random.randint(1, 7, size=4)
+        return sorted(np.random.randint(1, 7, size=4))
 
     def _get_observation(self):
         return {
