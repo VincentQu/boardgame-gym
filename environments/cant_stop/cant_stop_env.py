@@ -1,8 +1,11 @@
 import gymnasium as gym
 from gymnasium import spaces
 
-import numpy as np
+import colorama
+from colorama import Fore, Back, Style
 from IPython.display import display, HTML
+import numpy as np
+import os
 import sys
 
 
@@ -150,6 +153,9 @@ class CantStopEnv(gym.Env):
 
 
     def render(self):
+
+        colorama.init(autoreset=True)
+
         # Unicode characters for markers
         PLAYER_MARKER = '●'
         TEMP_MARKER = '○'
@@ -164,61 +170,99 @@ class CantStopEnv(gym.Env):
             for row in range(length, 13):
                 board[row][col-2] = INACCESSIBLE
 
-        # Place player markers
-        for player, positions in self.player_marker_positions.items():
-            for col, pos in positions.items():
+        if self.is_notebook: # Create HTML output
+            # Place player markers
+            for player, positions in self.player_marker_positions.items():
+                for col, pos in positions.items():
+                    if pos is not None:
+                        # Add player marker (multiple markers possible in same position)
+                        board[pos][col-2] += f'<span style="color:{self.player_colors[player]};">{PLAYER_MARKER}</span>'
+                        # Remove empty space marker
+                        board[pos][col - 2] = board[pos][col-2].replace(EMPTY_SPACE, '')
+
+            # Place temporary markers
+            for col, pos in self.tmp_marker_positions.items():
                 if pos is not None:
-                    # Add player marker (multiple markers possible in same position)
-                    board[pos][col-2] += f'<span style="color:{self.player_colors[player]};">{PLAYER_MARKER}</span>'
+                    # Add tmp marker (multiple markers possible in same position)
+                    board[pos][col-2] += f'<span style="color:gray;">{TEMP_MARKER}</span>'
                     # Remove empty space marker
-                    board[pos][col - 2] = board[pos][col-2].replace(EMPTY_SPACE, '')
+                    board[pos][col - 2] = board[pos][col - 2].replace(EMPTY_SPACE, '')
 
-        # Place temporary markers
-        for col, pos in self.tmp_marker_positions.items():
-            if pos is not None:
-                # Add tmp marker (multiple markers possible in same position)
-                board[pos][col-2] += f'<span style="color:gray;">{TEMP_MARKER}</span>'
-                # Remove empty space marker
-                board[pos][col - 2] = board[pos][col - 2].replace(EMPTY_SPACE, '')
+            # Create the HTML string
+            html = '<pre style="line-height: 1.2; font-family: monospace; font-size: 16px;">'
+            for row in range(12, -1, -1):
+                html += f"{row:2d} "
+                for col in range(11):
+                    html_cell = board[row][col]
+                    items = 0
+                    items += html_cell.count(EMPTY_SPACE)
+                    items += html_cell.count(INACCESSIBLE)
+                    items += html_cell.count('<span')
+                    # print(items, html_cell)
+                    if items == 1:
+                        html += f"  {board[row][col]}  "
+                    elif items == 2:
+                        html += f" {board[row][col]}  "
+                    elif items == 3:
+                        html += f" {board[row][col]} "
+                    elif items == 4:
+                        html += f"{board[row][col]} "
+                    else:
+                        html += f"{board[row][col]}"
+                html += '<br>'
 
-        # Create the HTML string
-        html = '<pre style="line-height: 1.2; font-family: monospace; font-size: 16px;">'
-        for row in range(12, -1, -1):
-            html += f"{row:2d} "
-            for col in range(11):
-                html_cell = board[row][col]
-                items = 0
-                items += html_cell.count(EMPTY_SPACE)
-                items += html_cell.count(INACCESSIBLE)
-                items += html_cell.count('<span')
-                # print(items, html_cell)
-                if items == 1:
-                    html += f"  {board[row][col]}  "
-                elif items == 2:
-                    html += f" {board[row][col]}  "
-                elif items == 3:
-                    html += f" {board[row][col]} "
-                elif items == 4:
-                    html += f"{board[row][col]} "
-                else:
-                    html += f"{board[row][col]}"
-            html += '<br>'
+            # Add column numbers (aligned)
+            html += "   "  # Extra space to align with board
+            for col in range(2, 13):
+                html += f"{col:^5}"
+            html += '<br><br>'
 
-        # Add column numbers (aligned)
-        html += "   "  # Extra space to align with board
-        for col in range(2, 13):
-            html += f"{col:^5}"
-        html += '<br><br>'
+            # Add current player and dice roll
+            html += f"Current player: <span style='color:{self.player_colors[self.current_player]};'>Player {self.current_player}</span><br>"
+            html += f"Dice roll: {self.dice}<br>"
+            html += '</pre>'
 
-        # Add current player and dice roll
-        html += f"Current player: <span style='color:{self.player_colors[self.current_player]};'>Player {self.current_player}</span><br>"
-        html += f"Dice roll: {self.dice}<br>"
-        html += '</pre>'
-
-        if self.is_notebook:
             display(HTML(html))
-        else:
-            print(html)
+
+        else: # Print coloured output using colorama
+
+            color_map = {
+                'red': Fore.RED,
+                'green': Fore.GREEN,
+                'blue': Fore.BLUE,
+                'yellow': Fore.YELLOW
+            }
+
+            # Place player markers
+            for player, positions in self.player_marker_positions.items():
+                for col, pos in positions.items():
+                    if pos is not None:
+                        # Add player marker (multiple markers possible in same position)
+                        board[pos][col - 2] = color_map[self.player_colors[player]] + PLAYER_MARKER + Style.RESET_ALL
+
+            # Place temporary markers
+            for col, pos in self.tmp_marker_positions.items():
+                if pos is not None:
+                    # Add tmp marker (multiple markers possible in same position)
+                    board[pos][col - 2] = Fore.LIGHTBLACK_EX + TEMP_MARKER + Style.RESET_ALL
+
+            # Print the board
+            for row in range(12, -1, -1):
+                print(f"{row:2d} ", end="")
+                for col in range(11):
+                    print(f"  {board[row][col]}  ", end="")
+                print()
+
+            # Add column numbers (aligned)
+            print("   ", end="")  # Extra space to align with board
+            for col in range(2, 13):
+                print(f"{col:^5}", end="")
+            print("\n")
+
+            # Add current player and dice roll
+            print(
+                f"Current player: {color_map[self.player_colors[self.current_player]]}Player {self.current_player}{Style.RESET_ALL}")
+            print(f"Dice roll: {self.dice}")
 
     def get_possible_actions(self):
         possible_actions = []
@@ -230,11 +274,11 @@ class CantStopEnv(gym.Env):
                 possible_actions.append((tuple(), False))
             else:
                 # If you have a valid move, you can always choose to continue or not
-                possible_actions.append(move, True)
-                possible_actions.append(move, False)
+                possible_actions.append((move, True))
+                possible_actions.append((move, False))
 
         return possible_actions
-    
+
     def _roll_dice(self):
         # Roll 4 dice
         return sorted(np.random.randint(1, 7, size=4))
