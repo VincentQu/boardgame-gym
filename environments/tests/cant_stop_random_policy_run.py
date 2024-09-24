@@ -22,13 +22,13 @@ while not done:
     obs, reward, terminated, truncated, info = env.step(action)
     done = terminated or truncated
 
-    env.render()
-    time.sleep(0.2)
+    # env.render()
+    # time.sleep(0.2)
 
-# TODO: Implement a turn count tracker (and maybe #times player moved/busted in env)
 print('Game done')
 
-# env.render()
+env.render()
 
-
-# TODO: Make web browser display work
+import pickle
+with open('cs_completed_game_env.pkl', 'wb') as f:
+    pickle.dump(env, f)

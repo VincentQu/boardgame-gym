@@ -5,7 +5,7 @@ import colorama
 from colorama import Fore, Back, Style
 from IPython.display import display, HTML
 import numpy as np
-import os
+import pandas as pd
 import sys
 
 
@@ -59,7 +59,7 @@ class CantStopActionSpace(gym.Space):
 
 
 class CantStopEnv(gym.Env):
-    def __init__(self, num_players):
+    def __init__(self, num_players=3):
         super(CantStopEnv, self).__init__()
 
         self.player_colors = ['red', 'green', 'blue', 'yellow']
@@ -99,10 +99,16 @@ class CantStopEnv(gym.Env):
         self.reset()
 
     def reset(self):
-        self.player_marker_positions = {p: {c: None for c in self.columns} for p in range(self.num_players)}
-        self.tmp_marker_positions = {c: None for c in self.columns}
+        self.player_marker_positions = {p: {c.item(): None for c in self.columns} for p in range(self.num_players)}
+        self.tmp_marker_positions = {c.item(): None for c in self.columns}
         self.current_player = int(np.random.randint(0, self.num_players, size=1))
         self.dice = self._roll_dice()
+
+        # Variables to track game history
+        self.observation_history = dict()
+        self.action_history = []
+        self.turn = 0
+        self.move = 0
 
         # Return observation and auxiliary information dict
         return self._get_observation(), {}
@@ -115,19 +121,23 @@ class CantStopEnv(gym.Env):
         possible_moves = self._get_possible_moves()
         assert columns in possible_moves, 'Impossible move'
 
+        self._update_action_history(action)
+        self.move += 1
+
         if len(columns) == 0: # Bust
             assert continue_flag == False, 'Cannot continue after busting'
             reward = -1 #TODO: Set correct reward value
 
             # Reset tmp markers
-            self.tmp_marker_positions = {c: None for c in self.columns}
+            self.tmp_marker_positions = {c.item(): None for c in self.columns}
 
             # Set next player and roll dice
-            self.current_player = (self.current_player + 1) % self.num_players
+            self._switch_to_next_player()
             self.dice = self._roll_dice()
 
             terminated = False
             observation = self._get_observation()
+            self._update_observation_history(observation)
 
         else: # Move
             reward = self._move_markers(action)
@@ -136,6 +146,7 @@ class CantStopEnv(gym.Env):
                 self.dice = self._roll_dice()
                 terminated = False
                 observation = self._get_observation()
+                self._update_observation_history(observation)
 
             else: # stop
                 # Update player marker positions and reset tmp markers
@@ -144,10 +155,11 @@ class CantStopEnv(gym.Env):
 
                 if not terminated:
                     # Set next player and roll dice
-                    self.current_player = (self.current_player + 1) % self.num_players
+                    self._switch_to_next_player()
                     self.dice = self._roll_dice()
 
                 observation = self._get_observation()
+                self._update_observation_history(observation)
 
         return observation, reward, terminated, False, {}
 
@@ -238,19 +250,36 @@ class CantStopEnv(gym.Env):
                 for col, pos in positions.items():
                     if pos is not None:
                         # Add player marker (multiple markers possible in same position)
-                        board[pos][col - 2] = color_map[self.player_colors[player]] + PLAYER_MARKER + Style.RESET_ALL
+                        board[pos][col - 2] += color_map[self.player_colors[player]] + PLAYER_MARKER + Style.RESET_ALL
+                        board[pos][col - 2] = board[pos][col - 2].replace(EMPTY_SPACE, '')
 
             # Place temporary markers
             for col, pos in self.tmp_marker_positions.items():
                 if pos is not None:
                     # Add tmp marker (multiple markers possible in same position)
-                    board[pos][col - 2] = Fore.LIGHTBLACK_EX + TEMP_MARKER + Style.RESET_ALL
+                    board[pos][col - 2] += Fore.LIGHTBLACK_EX + TEMP_MARKER + Style.RESET_ALL
+                    board[pos][col - 2] = board[pos][col - 2].replace(EMPTY_SPACE, '')
 
             # Print the board
             for row in range(12, -1, -1):
                 print(f"{row:2d} ", end="")
                 for col in range(11):
-                    print(f"  {board[row][col]}  ", end="")
+                    items = 0
+                    items += board[row][col].count(PLAYER_MARKER)
+                    items += board[row][col].count(TEMP_MARKER)
+                    items += board[row][col].count(INACCESSIBLE)
+                    items += board[row][col].count(EMPTY_SPACE)
+                    if items == 1:
+                        print(f"  {board[row][col]}  ", end="")
+                    elif items == 2:
+                        print(f" {board[row][col]}  ", end="")
+                    elif items == 3:
+                        print(f" {board[row][col]} ", end="")
+                    elif items == 4:
+                        print(f"{board[row][col]} ", end="")
+                    else:
+                        print(f"{board[row][col]}", end="")
+
                 print()
 
             # Add column numbers (aligned)
@@ -262,7 +291,13 @@ class CantStopEnv(gym.Env):
             # Add current player and dice roll
             print(
                 f"Current player: {color_map[self.player_colors[self.current_player]]}Player {self.current_player}{Style.RESET_ALL}")
-            print(f"Dice roll: {self.dice}")
+            print(f"Dice roll: {self.dice}, \n")
+
+            action_stats = self.get_action_stats()
+            with pd.option_context('display.max_columns', None):
+                print(action_stats)
+            # print(action_stats)
+
 
     def get_possible_actions(self):
         possible_actions = []
@@ -281,7 +316,7 @@ class CantStopEnv(gym.Env):
 
     def _roll_dice(self):
         # Roll 4 dice
-        return sorted(np.random.randint(1, 7, size=4))
+        return np.sort(np.random.randint(1, 7, size=4))
 
     def _get_observation(self):
         return {
@@ -366,13 +401,27 @@ class CantStopEnv(gym.Env):
         reward = 0 #TODO: Set correct reward value
         return reward
 
+    def _switch_to_next_player(self):
+        self.current_player = (self.current_player + 1) % self.num_players
+        self.turn += 1
+        self.move = 0
+
+    def _update_action_history(self, action):
+        columns, continue_flag = action
+        action_record = [self.turn, self.move, self.current_player, columns, continue_flag]
+        self.action_history.append(action_record)
+
+    def _update_observation_history(self, observation):
+        key = len(self.observation_history)
+        self.observation_history[key] = observation
+
     def _end_turn(self):
         # Set positions of tmp markers to marker positions of current player
         for column, position in self.tmp_marker_positions.items():
             if position is not None:
                 self.player_marker_positions[self.current_player][column] = position
         # Reset tmp markers
-        self.tmp_marker_positions = {c: None for c in self.columns}
+        self.tmp_marker_positions = {c.item(): None for c in self.columns}
 
         reward = 0 #TODO: Set correct reward value
         return reward
@@ -384,3 +433,46 @@ class CantStopEnv(gym.Env):
             if complete_columns >= 3:
                 return True
         return False
+
+    def get_action_history(self):
+        columns = ['turn', 'move', 'player', 'columns', 'continue_flag']
+        action_history_df = pd.DataFrame(self.action_history, columns=columns)
+        return action_history_df
+
+    def get_action_stats(self):
+        action_history_df = self.get_action_history()
+
+        roll_stats_df = action_history_df.groupby('player').agg(
+            dice_rolls=('player', 'size'),
+            turns=('turn', 'nunique'),
+            busts=('columns', lambda x: (x == ()).sum())
+        ).assign(
+            rolls_per_turn=lambda x: x['dice_rolls'] / x['turns']
+        ).reset_index()
+
+        column_stats = []
+        for player, columns in self.player_marker_positions.items():
+            started = sum([self.column_lengths[column] - 1 > columns[column] > 0 for column in self.column_lengths])
+            complete = sum([columns[column] == self.column_lengths[column] - 1 for column in self.column_lengths])
+            column_stats.append((player, started, complete))
+
+        column_stats_df = pd.DataFrame.from_records(
+            column_stats,
+            columns=['player', 'columns_started', 'columns_completed']
+        )
+
+        action_stats_df = pd.merge(
+            left=roll_stats_df, right=column_stats_df, how='inner', on='player'
+        ).rename(
+            columns={
+                'player': 'Player',
+                'dice_rolls': 'Rolls',
+                'turns': 'Turns',
+                'busts': 'Busts',
+                'rolls_per_turn': 'Rolls / turn',
+                'columns_started': 'Cols started',
+                'columns_completed': 'Cols completed'
+            }
+        )
+
+        return action_stats_df
