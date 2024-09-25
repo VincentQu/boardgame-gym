@@ -1,34 +1,27 @@
 from environments.cant_stop import CantStopEnv
-from policies.cant_stop import CantStopRandomPolicy
+from policies.cant_stop import StopAfterNRollsPolicy
 
-import time
+N = [10, 10]
 
-NUM_PLAYERS = 3
-
-env = CantStopEnv(num_players=NUM_PLAYERS)
-policies = [CantStopRandomPolicy() for _ in range(NUM_PLAYERS)]
+env = CantStopEnv(num_players=len(N))
+policies = [StopAfterNRollsPolicy(n) for n in N]
 
 obs, info = env.reset()
 done = False
 
 while not done:
-
     current_player = obs['current_player']
     current_policy = policies[current_player]
 
     possible_actions = env.get_possible_actions()
-    action = current_policy.select_action(possible_actions=possible_actions)
+    action = current_policy.select_action(possible_actions)
 
     obs, reward, terminated, truncated, info = env.step(action)
     done = terminated or truncated
 
-    # env.render()
-    # time.sleep(0.2)
-
-print('Game done')
-
 env.render()
+print(f'Winner: Player {env.winner}')
 
 import pickle
-with open('cs_completed_game_env.pkl', 'wb') as f:
+with open('cs_stop_after_n_env.pkl', 'wb') as f:
     pickle.dump(env, f)

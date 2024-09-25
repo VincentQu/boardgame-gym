@@ -103,6 +103,7 @@ class CantStopEnv(gym.Env):
         self.tmp_marker_positions = {c.item(): None for c in self.columns}
         self.current_player = int(np.random.randint(0, self.num_players, size=1))
         self.dice = self._roll_dice()
+        self.winner = None
 
         # Variables to track game history
         self.observation_history = dict()
@@ -428,9 +429,10 @@ class CantStopEnv(gym.Env):
 
     def _check_game_end(self):
         # Check if any player has 3 columns complete (i.e., marker positioned at highest position)
-        for positions in self.player_marker_positions.values():
+        for player, positions in self.player_marker_positions.items():
             complete_columns = sum([positions[column] == self.column_lengths[column] - 1 for column in self.column_lengths])
             if complete_columns >= 3:
+                self.winner = player
                 return True
         return False
 
@@ -452,8 +454,16 @@ class CantStopEnv(gym.Env):
 
         column_stats = []
         for player, columns in self.player_marker_positions.items():
-            started = sum([self.column_lengths[column] - 1 > columns[column] > 0 for column in self.column_lengths])
-            complete = sum([columns[column] == self.column_lengths[column] - 1 for column in self.column_lengths])
+            started = sum([
+                self.column_lengths[column] - 1 > columns[column] > 0
+                if columns[column] is not None else 0
+                for column in self.column_lengths
+            ])
+            complete = sum([
+                columns[column] == self.column_lengths[column] - 1
+                if columns[column] is not None else 0
+                for column in self.column_lengths
+            ])
             column_stats.append((player, started, complete))
 
         column_stats_df = pd.DataFrame.from_records(
